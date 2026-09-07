@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verse Memorizer</title>
+<style>
+  :root {
+    --bg: #faf8f4;
+    --card-bg: #ffffff;
+    --text-primary: #23201b;
+    --text-secondary: #6b6255;
+    --text-muted: #a89f8f;
+    --accent: #a8552c;
+    --accent-dark: #8a4322;
+    --border: #e8e1d4;
+    --danger: #b5433a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .wrap {
+    width: 100%;
+    max-width: 640px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+    font-weight: 600;
+  }
+  .subtitle {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0 0 24px;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  }
+  textarea {
+    width: 100%;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 15px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fdfcfa;
+    color: var(--text-primary);
+  }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    cursor: pointer;
+    background: var(--accent);
+    color: white;
+    transition: background 0.15s ease, opacity 0.15s ease;
+  }
+  button:hover { background: var(--accent-dark); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  button.secondary:hover { background: #f3efe7; color: var(--text-primary); }
+  .error-text {
+    font-size: 13px;
+    color: var(--danger);
+    margin: 10px 0 0;
+    display: none;
+  }
+  .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .counter { font-size: 13px; color: var(--text-muted); }
+  #word-stage {
+    min-height: 110px;
+    padding: 2rem 0.25rem;
+    font-size: 21px;
+    line-height: 1.8;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 10px;
+  }
+  #word-stage:focus { outline: 2px solid var(--accent); outline-offset: 4px; }
+  .word-hidden { color: var(--text-muted); }
+  .word-shown { color: var(--text-primary); font-weight: 500; }
+  .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .progress { font-size: 13px; color: var(--text-muted); margin-left: 2px; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip: rect(0,0,0,0);
+  }
+  footer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Verse Memorizer</h1>
+  <p class="subtitle">Reveal one word at a time. Each quote runs until its citation in parentheses.</p>
+
+  <div class="card">
+    <div id="setup-view">
+      <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 8px;">Edit the text below if you'd like, or just hit start.</p>
+      <textarea id="lines-input" rows="10"></textarea>
+      <div style="margin-top: 14px;">
+        <button id="start-btn">▶ Start</button>
+      </div>
+      <p id="setup-error" class="error-text">Enter at least one line first.</p>
+    </div>
+
+    <div id="practice-view" style="display: none;">
+      <div class="top-row">
+        <span id="line-counter" class="counter"></span>
+        <button id="restart-btn" class="secondary" style="font-size: 13px; padding: 5px 12px;">✎ Edit text</button>
+      </div>
+
+      <div id="word-stage" tabindex="0" role="button" aria-label="Click to reveal the next word"></div>
+
+      <div class="controls">
+        <button id="prev-line-btn" class="secondary" title="Previous quote">←</button>
+        <button id="reveal-btn">Reveal next word</button>
+        <button id="line-done-btn" style="display: none;">Next quote →</button>
+        <span id="progress-text" class="progress"></span>
+      </div>
+    </div>
+  </div>
+
+  <footer>Click the word area, or the button, to reveal the next word.</footer>
+</div>
+
+<script>
+const PRELOADED_TEXT = `Bhagwānnu je ek nimiṣhmātranu darshan
+te upar anant koṭi brahmānḍnā je viṣhaysukh chhe
+te sarvene vārīferīne nākhī deīe  ane Bhagwānnā ek rommā jeṭalu sukh rahyu chhe  teṭalu sukh jo anant koṭi brahmānḍnā viṣhaysukh bheḷā karīe to paṇ tenā koṭimā bhāgnī barobar paṇ thāy nahī.
+(Vachanamrut Sarangpur 1)
+
+Vishaynu je sukh chhe te karta atmanu sukh bahu adhik chhe ne te karta Bhagwanu sukh e to chintamani chhe.
+[Much greater than the enjoyment of material pleasures is the bliss of the ātmā and even better is the bliss of God, which is like the chintāmani.]
+(Swamini Vato: 1/26)
+
+Karoḍ rūpiyā kharachtā paṇ āvā Sādhu maḷe nahi
+ne karoḍ rūpiyā detā paṇ ā vātu maḷe nahi
+ne karoḍ rūpiyā āpatā paṇ manuṣhya-deh maḷe nahi;
+ne āpaṇe paṇ karoḍ janma dharyā chhe,
+paṇ koī vakhat āvo jog maḷyo nathī.
+Nīkar shu karavā deh dharavo paḍe?
+(Swamini Vato: 1/19)
+
+Ā dehe Bhagwānne bhajī levā, ne deh to hamaṇā paḍashe, māṭe ā to vījaḷīnā zabakārāmā motī parovī levu, tem thoḍāmā kām kāḍhī levu.
+(Swamini Vato: 6/77)
+
+Karoḍ kām bagāḍīne paṇ ek mokṣha sudhārvo
+ne kadāpi karoḍ kām sudhāryā
+ne ek mokṣha bagāḍyo to temā shu karyu?
+(Swamini Vato: 1/14)
+
+Ā meḍiyu maḷī chhe ne sāru sāru khāvā maḷe chhe,
+ke mān maḷe chhe, ityādik manuṣhya dehnu faḷ nathī. Te to vimukhne paṇ maḷe chhe. Māṭe manuṣhya dehnu faḷ to sārāno sang ne swabhāv ṭaḷe, eṭalu ja chhe.
+(Swamini Vato: 2/19)
+
+Āpaṇe paṇ e Akṣharrūp je mukta temanī panktimā bhaḷavu chhe ane Akṣhardhāmmā jaīne akhanḍ Bhagwānnī sevāmā hajūr rahevu chhe, paṇ
+nāshavant ne tuchchh evu je māyik sukh tene ichchhavu nathī ne emā koī ṭhekāṇe
+lobhāvu nathī.
+(Vachanamrut Gadhada I – 21)
+
+Āpaṇo janma be vāt sādhavā sāru thayo chhe, temā ek Akṣharrūp thāvu, emā deh antarāyrūp chhe; ne bīju Bhagwānmā joḍāvu, temā sang anek prakārnā antarāyrūp chhe. E be khoṭ ṭāḷavī.
+(Swamini Vato: 4/99)
+
+Marī to sarvene javu chhe paṇ āvī rīte bhakti karavī
+e ja jīvyāno moṭo lābh chhe.
+(Vachanamrut Gadhada III – 30)
+
+Nashwant ā deh vadethi, Avinashi fal levu ji,
+Patravalane jami karine, bahar fenki devu ji
+(Narayandas)
+
+Ati sāche bhāve karīne satsang kare to tene koī jātno doṣh haiyāmā rahe nahī ane deh chhatā ja brahmarūp thaī jāy.
+(Vachanamrut Sarangpur 9)
+Jyāre āvo sant-samāgam prāpt thayo tyāre deh mūkīne jene pāmavā hatā te to deh chhatā ja maḷyā chhe; māṭe jene param pad kahīe, mokṣh kahīe tene
+chhate dehe ja pāmyo chhe.
+(Vachanamrut Gadhada III – 2)
+
+Bhagwāne kahyu chhe je, "Jevo hu satsange karīne vash thāu chhu evo tap, yagna, yog, vrat, dānādik sādhane karīne paṇ vash nathī thāto." Te satsang shu je, 'Moṭā Ekāntikne hāth joḍavā ne te kahe
+tem karavu e ja chhe.'
+(Swamini Vato: 1/17)
+
+Jan pratye jivan kahe, jene jetlo satsang;
+Tene tetla papno, thay baher bhitar bhang.
+(Bhaktachintamani – 84)
+
+Aksharnā vāsī vahālo, āvyā avani par,
+Navkhanḍ dhartīmā Swāmī, chhatrāyā chāle rāj...
+Avani par avi vale satsang sthapyo,
+Harijanone kol, kalyāṇno āpyo rāj... Akshar 1
+Pānche vartmān pāḷe, bāīo ne bhāīo,
+Harijan sangāthe kīdhī, sāchī sagāīo rāj... Akshar 2
+Bāīo dekhīne bhāīo, chheṭerā chāle,
+Paḍī vastu koīnī, hāthe nav jhāle rāj... Akshar 3
+Devnā dev vahālo, dhāmnā Dhāmī,
+Pragaṭ Prabhunu nām, Sahajānand Swāmī rāj... Akshar 4
+Premānandnā Swāmī ānandkārī,
+Potānā jannī vā'le, lāj vadhārī rāj... Akshar 5
+(Premanand Swami)
+
+Ane satsangī paṇ ene ja kahīe; kem je, satyarūp evo je potāno ātmā tathā satyarūp evā je Bhagwān teno jene āvī rīte sang thayo tene satsangī kahīe.
+(Vachanamrut Gadhada III – 39)
+
+Trīs lakṣhaṇe yukta evā je sant teno je sang te man-karma-vachane rākhe, to jeṭalā kalyāṇne arthe sādhan chhe teṭalā sarve tenā sangmā āvī jāy chhe.
+(Vachanamrut Vartal 4)
+
+Sant samāgam kīje, ho nishdin...
+Mān tajī santanke mukhse,
+prem sudhāras pīje... ho 1
+Antar kapaṭ meṭke apnā,
+le unku man dīje... ho 2
+Bhavdukh ṭaḷe baḷe sab dushkrīt,
+sabvidhi kāraj sīje... ho 3
+Brahmānand kahe santkī sobat,
+janma sufal karī līje... ho 4
+(Brahmanand Swami)
+
+Sacho malyo chhe satsang,
+ange achal kari rakhjo re;
+Rakhe chade bijano rang,
+evu dahapan dur nakhjo re….2
+(Chosath Padi – Pad 25)
+
+Jem ā līmbaḍānu vṛukṣh chhe te ek vār jāṇī līdhu chhe, pachhī koī rīte manmāsankalp thato nathī je, 'Līmbaḍo hashe ke nahī hoy?' Evī rīte game teno sang thāy ane game tevā shāstra sāmbhaḷe paṇ koī rīte
+karīne Bhagwānnā swarūpno je nishchay karyo hoy temāthī man ḍag-mage nahī, evo je nirutthānpaṇe Bhagwānno nishchay ene ame tadātmakpaṇu kahīe
+chhīe.
+(Vachanamrut Gadhada II – 14)
+
+Jene Bhagwānno ne santno māhātmya- gnāne sahit nishchay hoy tethī Bhagwānne arthe ne santne arthe shu na thāy? Ene arthe kuṭumbno tyāg kare,
+loklājno tyāg kare, rājyano tyāg kare,
+sukhno tyāg kare, dhanno tyāg kare,
+strīno tyāg kare ane strī hoy te puruṣhno
+tyāg kare.
+(Vachanamrut Loya 3)
+
+Āpaṇe to Akṣhardhāmmā jāvu chhe evo ek sankalp rākhavo.
+(Swamini Vato: 1/301)
+
+Keṭalāk siddha thāy chhe
+ne keṭalāk sarvagna thāy chhe
+ne keṭalāk devata thāy chhe
+ityādik anant prakārnī moṭyap pāme chhe
+tathā param padne pāme chhe e sarve Bhagwānnī upāsanāne baḷe pāme chhe,
+paṇ upāsanā vinā koī vāt siddha thatī nathī.
+(Vachanamrut Gadhada I – 56)
+
+Jem so so shunya sara kare, pan ek na kare jo agale;
+Te sarvalo shano melshe. Je kare chhe kalap kagale.
+Tem ek Harine parhare, biji kare chaturai kot;
+Te to mathafar chale marge, jem jem chale tem khot.
+(Sarsiddhi – 1/7,8)
+
+Jene potānu kalyāṇ ichchhavu tene koī prakārnu
+mān rākhavu nahī je, 'Hu uchcha kuḷmā janma pāmyo chhu ke hu dhanāḍhya chhu ke hu rūpvān chhu ke hu
+panḍit chhu.'
+Evu koī prakārnu manmā mān rākhavu nahī
+ane garīb satsangī hoy tenā paṇ dāsānudās thaī rahevu.
+(Vachanmrut Gadhada III – 12)
+
+Jene Bhagwānnī prāpti thaī chhe ane gṛuhasthāshramī chhe to paṇ te nirguṇ kahevāy ane tyāgī hoy te paṇ nirguṇ kahevāy.
+(Vachanamrut Gadhada II – 8)
+Gṛuhī-tyāgīno kāī meḷ nathī, jenī samajaṇ
+moṭī tene ja sauthī moṭo haribhakta
+jāṇavo.
+(Vachanamrut Vartal 20)
+
+Jene māhātmye sahit nishchayhoy tene em samajāy je, 'Je divase Bhagwānnu darshan thayu
+te divasthī ja kalyāṇ to thaī rahyu chhe
+ane je jīv bhāve karīne māru darshan kare
+tathā māru vachan māne tenu paṇ kalyāṇ thaī jāy
+to māre kalyāṇno shyo sanshay chhe?
+Hu to kṛutārth chhu ane je kāī sādhan karu chhu
+te to Bhagwānnī prasannatāne arthe karu chhu,' em samaje tene Bhagwānno māhātmye sahit nishchay jāṇavo.
+(Vachanamrut Gadhada I – 72)
+
+Atishay je Moṭā Puruṣh hoy teno je upar
+rājīpo thāy tenā game tevā malin sanskār hoy
+to nāsh pāme ane Moṭā Puruṣhno rājīpo thayo hoy
+to rānk hoy te rājā thāy
+ane game tevā bhūnḍā prārabdha hoy
+to rūḍā thāy ane game tevu tene māthe vighna āvanāru hoy te nāsh thaī jāy.
+(Vachanamrut Gadhada I – 58)
+
+Jene pratyakṣh pramāṇ draḍh āsharo hoy
+tene manmā evī bīk na rākhavī je, 'Hu rakhe marīne bhūt-pret thau ke rakhe Indralokne ja pāmu ke rakhe
+Brahmalokne ja pāmu!' Evī āshankā
+manmā rākhavī nahī; kem je, je evo Bhagwānno bhakta hoy te to Bhagwānnā dhāmne ja pāme
+paṇ vachmā kyāy tene Bhagwān rahevā de nahī.
+(Vachanamrut Gadhada III – 7)
+
+Jene potānu kalyāṇ ichchhavu tene to
+Bhagwān ne Bhagwānnā sādhu ethī
+uparānt bīju kāī jagatmā sukhdāyī nathī.
+(Vachanamrut Gadhada III – 7)
+
+Amāro draḍh vishvās rākhasho ne kahīe
+tem karasho to tamane mahākaṣhṭ koīk
+āvī paḍashe tethī athavā sāt dakālī jevu
+paḍashe te thakī rakṣhā karashu ane
+koī ūgaryāno āro na hoy evu kaṣhṭ āvī
+paḍashe toy paṇ rakṣhā karashu.
+(Vachanamrut Jetalpur 5)
+
+Ashro - māyā taravāno upāy e chhe je,
+jyāre sarva karma ane māyā teno nāsh
+karanārā ne māyāthī par je sākṣhātkār
+Shrī Puruṣhottam Bhagwān athavā te
+Bhagwānnā maḷel sant temanī jīvne
+prāpti jyāre thāy chhe tyāre temanā
+āshraythī māyā ullanghāy chhe.
+(Vachanamrut Jetalpur 1)
+
+Nischay - Jene Bhagwānno ne santno
+māhātmya-gnāne sahit nishchay hoy.
+(Vachanamrut Loya 3)
+
+Kalyan - Bhagwān ne Bhagwānnā sant e
+ja kalyāṇkārī chhe.
+(Vachanamrut Gadhada II – 59)
+
+Seva - Bhagwānnā santnī sevā to bahu
+moṭā puṇyavāḷāne maḷe chhe.
+(Vachanamrut Gadhada II – 59)
+
+Paap tale - Satpuruṣhno āsharo kare tyāre
+game tevo pāpī hoy to paṇ ati pavitra thaī
+jāy chhe.
+(Vachanamrut Vartal 14)
+
+Dukh tale - Bhagwān ane Moṭā Sādhune
+āshare karīne to vādaḷ jevā dukh āvavānā
+hoy te paṇ ṭaḷī jāy ne sādhan karīne to
+kūṭī kūṭīne marī jāy to paṇ na ṭaḷe.
+(Swamini Vato: 1/114)
+
+Bhagwānnā sant sāthe to evu het rākhavu
+jevu het strī upar chhe, ke putra upar
+chhe, ke mābāp ne bhāī upar chhe
+(Vachanamrut Gadhada II – 59)
+
+Bhagwānno nishchay karavo te ekalo
+potānā jīvnā kalyāṇne ja arthe karavo,
+paṇ koīk padārthnī ichchhāe karīne na
+karavo je, 'Hu satsang karu to māro deh
+māndo chhe te sājo thāy, athavā vānziyo
+chhu te dīkaro āve, ke dīkarā marī jāy
+chhe te jīvatā rahe, ke nirdhan chhu te
+dhanvān thau, ke gām-garās gayo chhe
+te satsang karīe to pāchho āve,' evī jātnī
+je padārthnī ichchhā te rākhīne satsang
+na karavo.
+(Vachanamrut Gadhada I – 70)
+
+Tap karīne baḷī jāy to paṇ jo Bhagwānno
+āsharo na hoy to Bhagwān teḍavā na āve
+ne hinḍoḷā-khāṭmā sūī rahe ne dūdh-
+sākar ne chokhā jame ne sevānā karanārā
+ne raḷnārā bījā hoy to paṇ tene antsame
+vimānmā besārīne Bhagwān teḍī jāy, jo
+Bhagwānno draḍh āsharo hoy to. Māṭe
+mokṣhanu kāraṇ āsharo chhe.
+(Swamini Vato: 1/172)
+
+Avī bhagwatswarūp sambandhī je vārtā
+te to shāstramāthī paṇ potānī meḷe
+samajāya nahī. Ane sadgranthomā āvī
+vārtā to hoy paṇ jyāre satpuruṣh pragaṭ
+thāy chhe tyāre temanā mukh thakī ja
+vāt samajyāmā āve chhe, paṇ potānī
+buddhibaḷe karīne sadgranthomāthī paṇ
+samajātī nathī.
+(Vachanamrut Gadhada II – 13)
+
+Satpuruṣhne viṣhe draḍh prīti e ja
+ātmadarshannu sādhan chhe ane
+satpuruṣhno mahimā jāṇyānu paṇ e ja
+sādhan chhe ane Parameshvarnu sākṣhāt
+darshan thavānu paṇ e ja sādhan chhe.
+(Vachanamrut Vartal 11)
+
+Sant param hitkārī, jagat māhi...
+Prabhupad pragaṭ karāvat prīti,
+bharam mīṭāvat bhārī... jagat 1
+Param-krupālu sakal jīvan par,
+Harisam sab dukhhārī... jagat 2
+Triguṇātīt fīrat tanu tyāgī,
+rīt jagatse nyārī... jagat 3
+Brahmānand kahe santkī sobat,
+milat hai pragaṭ Murārī... jagat 4
+(Brahmanand Swami)
+
+Shāstre kahyā je niṣhkām, nirlobh,
+nirmān, nihsvād, nihsneh ityādik santnā
+lakṣhaṇ tene sāmbhaḷīne evā lakṣhaṇ jyā
+dekhāy evā je sant tene ne Bhagwānne
+sākṣhāt sambandh hoy; māṭe evā santnā
+vachane karīne Bhagwānno nishchay
+karavo ne tenā vachanmā draḍh vishvās
+karavo tene nishchay kahīe.
+(Vachanamrut Gadhada III – 27)
+
+Aṣhṭāvarṇe yukta evā je koṭi koṭi
+brahmānḍ te je Akṣharne viṣhe aṇunī
+peṭhe jaṇāy chhe, evu je Puruṣhottam
+Nārāyaṇnu dhāmrūp Akṣhar te rūpe pote
+rahyo thako Puruṣhottamnī upāsanā
+kare, tene uttam nirvikalp nishchayvāḷo
+kahīe.
+(Vachanamrut Loya 12)
+
+Nirvikalp uttam ati, nischay tav
+Ghanshyām.
+(Please grant me the highest level of faith in your divine form, O Ghanshyam!)
+(Premanand Swami)
+
+Nirvikalp uttam ati, Evo nischay thay tamaro;
+Albelo tam agale, Hu araj karu e saru...
+...E var magu chhu.
+(Premanand Swami)
+
+Je brahmarūp thayo tene ja Puruṣhottamnī
+bhaktino adhikār chhe.
+(Vachanamrut Loya 7)
+
+Jene ekāntiknā dharmamā sthiti thaī hoy
+te thakī ja ekāntikno dharma pamāy chhe.
+(Vachanamrut Gadhada I – 60)
+
+Swadharma, gnān, vairāgya ane
+māhātmyagnān teṇe sahit je Bhagwānnī
+bhakti teṇe yukta evā je Bhagwānnā
+Ekāntik Sādhu tenā prasang thakī
+Bhāgwat Dharmanu poṣhaṇ thāy chhe
+ane vaḷī jīvne mokṣhanu je dvār te paṇ
+evā Sādhunā prasang thakī ughāḍu thāy
+chhe.
+(Vachanamrut Gadhada I – 54)
+
+Koṭi janme kasar ṭaḷavānī hoy te āj ṭaḷī jāy
+ne brahmarūp karī mūke, jo kharekharā
+sādhu maḷe ne te kahe tem kare to.
+(Swamini Vato: 1/119)
+
+Sant kṛupāe sukh ūpaje, sant kṛupāthī sare kām;
+Sant kṛupāthī pāmīe, Pūraṇ Puruṣhottam Dhām.
+Sant kṛupāe sadmati jāge, sant kṛupāthī sadguṇ;
+Sant kṛupā vinā sādhutā, kahone pāmyā kuṇ.
+(Bhaktachintamani – 2/2,3)
+
+Satpuruṣhno je prasang e ja
+Parameshvarne viṣhe draḍh prīti thavānu
+kāraṇ chhe.
+(Vachanamrut Gadhada I – 44)
+
+Āvā Sādhune manmā sambhārīe to mannā
+pāp baḷī jāy ne vātu sāmbhaḷīe to kānnā
+pāp baḷī jāy ne darshan karīe to ānkhnā
+pāp baḷī jāy, em mahimā jāṇavo.
+(Swamini Vato: 1/30)
+
+Kāmdughā kalpataru, pāras chintāmaṇi chār;
+Sant samān e eke nahi, me manmā karyo vichār.
+Alp sukh emā rahyu, maḷī ṭaḷī jāy chhe eh;
+Sant sevye sukh ūpaje, rahe akhanḍ aṭaḷ eh.
+(Bhaktachintamani – 2/7,8)
+
+Jevī parokṣh devne viṣhe jīvne pratīti
+chhe tevī jo pratyakṣh gururūp Harine
+viṣhe āve, to jeṭalā arth prāpt thavānā
+kahyā chhe teṭalā sarve arth tene prāpt
+thāy chhe.
+(Vachanamrut Gadhada III – 2)
+
+Yasya deve parā bhaktir Yathā deve tathā gurau,
+Tasyaite kathitāḥ hyarthāḥ Prakāśante mahātmanāḥ.
+(Svetasvatara Upanishad 6/23)
+
+E vyasan to karyā thāy chhe paṇ prārabdhe
+karīne nathī. Māṭe jo e vyasanne ṭāḷyāno
+shraddhā sahit āgrah kare ne shūrvīrpaṇu
+hoy to te ṭaḷī jāy, paṇ shraddhā na hoy ne
+foshī hoy tethī e swabhāv ṭaḷe nahī.
+(Vachanamrut Loya 8)
+
+Jene niṣhkāmī vartamān draḍh hoy to te
+thakī ame hajār gāu chheṭe jaīe to paṇ
+tenī pāse ja chhīe; ane jene te niṣhkāmī
+vartamānmā kāchyap chhe ne te jo amārī
+pāse rahe chhe toy paṇ te lākh gāu chheṭe
+chhe. Ane amane niṣhkāmī bhakta hoy
+tenā ja hāthnī karī sevā game chhe.
+(Vachanamrut Gadhada II – 33)
+
+Aksharnā vāsī vahālo, āvyā avani par,
+Navkhanḍ dhartīmā Swāmī, chhatrāyā chāle rāj...
+Avani par āvī vahāle satsang sthāpyo
+Harijanone kol, kalyāṇno āpyo rāj... Akshar 1
+Pānche vartmān pāḷe, bāīo ne bhāīo,
+Harijan sangāthe kīdhī, sāchī sagāīo rāj... Akshar 2
+Bāīo dekhīne bhāīo, chheṭerā chāle,
+Paḍī vastu koīnī, hāthe nav jhāle rāj... Akshar 3
+Devnā dev vahālo, dhāmnā Dhāmī,
+Pragaṭ Prabhunu nām, Sahajānand Swāmī rāj... Akshar 4
+Premānandnā Swāmī, ānandkārī,
+Potānā jannī vā'le, lāj vadhārī rāj... Akshar 5
+(Premanand Swami)
+
+Nirvikalp uttam ati, nischay tav Ghanshyām;
+Māhātmya-gnān-yukt bhakti tav, ekāntik sukhḍhām. 1
+Mohime tav bhaktapano, tāme koī prakār;
+Dosh na rahe koī jātko, suniyo Dharmakumār. 2
+Tumāro tav Hari bhaktako, droh kabu nahi hoy;
+Ekantik tav dāsko, dīje samāgam moy. 3
+Nāth nīrantar darsh tav, tav dāsanko dās;
+Ehī māgu karī vinay Hari, sadā rākhiyo pās. 4
+He Krupālo! He Bhaktapte! Bhaktavatsal! suno bāt;
+Dayāsindho! stavan karī, māgu vastu sāt. 5
+Sahajānand Mahārājke, sab satsangī sujāṇ;
+Tāku hoy dradh vartano, Shikshāpatrī pramāṇ. 6
+So Patrī me atibaḍe, niyam ekādash joy;
+Tākī vigti kahat hu, suniyo sab chitt proy. 7
+Hinsā na karnī jantukī, partriyā sangko tyāg;
+Māns na khāvat madhyaku, pīvat nahi badbhāg. 8
+Vidhvāku sparshat nahi, karat na ātmaghat;
+Chori na karnī kāhukī, kalank na kouku lagāt. 9
+Nindat nahi koy devku, bin khapto nahi khāt;
+Vimukh jīvake vadanse, kathā sunī nahi jāt. 10
+Ehī (vidhi) dharmake niyamme, barto sab haridās;
+Bhajo Shrī Sahajānandpad, chhoḍi aur sab ās. 11
+Rahi ekādash niyamme, karo Shrī Haripad prīt;
+Premānand kahe dhāmme, jāo nishank jag jīt. 12
+(Premanand Swami)
+
+Bhagwān āpaṇne hāthīe besāḍe to hāthīe
+besīne rājī rahevu ane gadheḍe besāḍe
+to gadheḍe besīne rājī rahevu… e Bhagwānnu karyu sarve thāy chhe.  Māṭe sūku pānaḍu jem vāyune ādhāre fare tem e Bhagwānne ādhīn rahīne ānandmā
+e Parameshvarnu bhajan karavu ane koī
+jātno manmā udveg āvavā devo nahī.
+(Vachanamrut Gadhada I – 74)
+
+Jo mār mār karato koī āvato hoy to em
+samajavu je, 'Mārā Swāmīnu ja karyu
+sarve thāy chhe, paṇ te vinā koīnu
+halāvyu pānaḍu paṇ halatu nathī.
+(Swamini Vato: 1/88)
+
+Bhagwān to potānā bhaktanī rakṣhā
+karavāmā ja beṭhā chhe. Kenī peṭhe? To
+jem pāpaṇ ānkhanī rakṣhā kare chhe
+ne hāth kanṭhanī rakṣhā kare chhe ne
+māvatar chhokarānī rakṣhā kare chhe
+ne rājā prajānī rakṣhāmā chhe, tem ja
+Bhagwān āpaṇī rakṣhāmā chhe.
+(Swamini Vato: 1/22)
+
+Apaṇe jyāre tan-man-dhan Bhagwānne
+arpaṇ karyu tyāre have Bhagwānnī
+ichchhā te ja āpaṇu prārabdha chhe,
+te vinā bīju koī prārabdha nathī. Māṭe
+Bhagwānnī ichchhāe karīne game tevu
+sukh-dukh āve, temā koī rīte akaḷāī javu
+nahī.
+(Vachanamrut Gadhada III – 13)
+
+Antarmā ṭāḍhu rahyā kare ne dhagī na
+jāy tenā be upāy chhe: ek to Bhagwānnu
+bhajan karavu ne bīju Bhagwānne sarva-
+kartā samajavā ne temā sukh āve to
+sukh bhogavī levu ne dukh āve to dukh
+bhogavī levu. Te kahyu chhe je,
+Dāsnā dushman Hari ke'dī hoy nahi,
+jem karashe tem sukh ja thāshe.
+(Swamini Vato: 1/148)
+
+Je dukhe thai sukh janne, te de chhe dukh daya kari,
+Jeh sukhe dukh upje, te ape nahi ke di Har
+(Dhiraj Akhyan – 1/8)`;
+
+let lines = [];
+let currentLine = 0;
+let revealedCount = 0;
+
+const setupView = document.getElementById('setup-view');
+const practiceView = document.getElementById('practice-view');
+const linesInput = document.getElementById('lines-input');
+const startBtn = document.getElementById('start-btn');
+const setupError = document.getElementById('setup-error');
+const wordStage = document.getElementById('word-stage');
+const revealBtn = document.getElementById('reveal-btn');
+const lineDoneBtn = document.getElementById('line-done-btn');
+const restartBtn = document.getElementById('restart-btn');
+const prevLineBtn = document.getElementById('prev-line-btn');
+const lineCounter = document.getElementById('line-counter');
+const progressText = document.getElementById('progress-text');
+
+linesInput.value = PRELOADED_TEXT;
+
+function isFullyParen(line) {
+  return /^\(.*\)$/.test(line);
+}
+
+function groupIntoQuotes(rawText) {
+  const rawLines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const blocks = [];
+  let buffer = [];
+  let inTrailer = false;
+  for (const line of rawLines) {
+    if (buffer.length === 0) {
+      buffer.push(line);
+      inTrailer = isFullyParen(line);
+      continue;
+    }
+    if (inTrailer) {
+      if (isFullyParen(line)) {
+        buffer.push(line);
+      } else {
+        blocks.push(buffer.join(' '));
+        buffer = [line];
+        inTrailer = isFullyParen(line);
+      }
+    } else {
+      buffer.push(line);
+      if (isFullyParen(line)) inTrailer = true;
+    }
+  }
+  if (buffer.length > 0) blocks.push(buffer.join(' '));
+  return blocks;
+}
+
+function startPractice() {
+  const grouped = groupIntoQuotes(linesInput.value);
+  if (grouped.length === 0) {
+    setupError.style.display = 'block';
+    return;
+  }
+  setupError.style.display = 'none';
+  lines = grouped;
+  currentLine = 0;
+  revealedCount = 0;
+  setupView.style.display = 'none';
+  practiceView.style.display = 'block';
+  renderLine();
+}
+
+function getWords() {
+  return lines[currentLine].split(' ').filter(w => w.length > 0);
+}
+
+function renderLine() {
+  const words = getWords();
+  lineCounter.textContent = 'Quote ' + (currentLine + 1) + ' of ' + lines.length;
+  wordStage.innerHTML = words.map((w, i) => {
+    if (i < revealedCount) {
+      return '<span class="word-shown">' + escapeHtml(w) + '</span>';
+    }
+    return '<span class="word-hidden">•••</span>';
+  }).join(' ');
+  const done = revealedCount >= words.length;
+  revealBtn.style.display = done ? 'none' : 'inline-flex';
+  lineDoneBtn.style.display = done ? 'inline-flex' : 'none';
+  lineDoneBtn.textContent = (currentLine === lines.length - 1) ? 'Restart from quote 1' : 'Next quote →';
+  progressText.textContent = revealedCount + ' / ' + words.length + ' words';
+  prevLineBtn.disabled = currentLine === 0;
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function revealNext() {
+  const words = getWords();
+  if (revealedCount < words.length) {
+    revealedCount++;
+    renderLine();
+  }
+}
+
+function nextLine() {
+  if (currentLine < lines.length - 1) {
+    currentLine++;
+    revealedCount = 0;
+    renderLine();
+  } else {
+    currentLine = 0;
+    revealedCount = 0;
+    renderLine();
+  }
+}
+
+function prevLine() {
+  if (currentLine > 0) {
+    currentLine--;
+    revealedCount = 0;
+    renderLine();
+  }
+}
+
+startBtn.addEventListener('click', startPractice);
+wordStage.addEventListener('click', revealNext);
+wordStage.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    revealNext();
+  }
+});
+revealBtn.addEventListener('click', revealNext);
+lineDoneBtn.addEventListener('click', nextLine);
+prevLineBtn.addEventListener('click', prevLine);
+restartBtn.addEventListener('click', () => {
+  setupView.style.display = 'block';
+  practiceView.style.display = 'none';
+});
+</script>
+</body>
+</html>
