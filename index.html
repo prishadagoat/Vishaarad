@@ -873,6 +873,10 @@ wordStage.addEventListener('keydown', (e) => {
   }
 });
 revealBtn.addEventListener('click', revealNext);
+document.getElementById('skip-btn').addEventListener('click', () => {
+  revealedCount = getWords().length;
+  renderLine();
+});
 lineDoneBtn.addEventListener('click', nextLine);
 prevLineBtn.addEventListener('click', prevLine);
 restartBtn.addEventListener('click', () => {
